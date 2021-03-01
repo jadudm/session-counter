@@ -21,15 +21,19 @@
 ;; Creates a new, empty database in memory.
 ;; Initializes a table for temporary data storage.
 (define (initialize-db)
-  (the-db (sqlite3-connect #:database 'memory))
-  (query-exec (the-db)
-              (create-table wifi_nearby
-                            #:columns
-                            [mac text]
-                            [timestamp date])))
+  (cond
+    [(connection? (the-db))
+     (query-exec (the-db) "DELETE FROM wifi_nearby")
+     (query-exec (the-db) "VACUUM")]
+    [else (the-db (sqlite3-connect #:database 'memory))
+          (query-exec (the-db)
+                      (create-table wifi_nearby
+                                    #:columns
+                                    [mac text]
+                                    [timestamp date]))]))
 
 (define (log-mac mac #:timestamp [timestamp (now)])
-  (unless (object? (the-db))
+  (unless (connection? (the-db))
     (initialize-db))
   (query-exec (the-db)
               (insert #:into wifi_nearby

@@ -47,6 +47,8 @@
     (channel-put logger-ch
                  (format "running for ~a" seconds))
     (define pkts (run-tshark #:seconds seconds #:adapter adapter))
+    (channel-put logger-ch
+                 (format "found ~a MAC addresses" (hash-count pkts)))
     (for ([(k v) pkts])
         (log-mac k #:timestamp (now)))
     (loop)))
@@ -79,7 +81,7 @@
     (for ([(mac count) consolidated])
       (define sub-mac (substring mac 0 8))
       (channel-put logger-ch
-                   (format "reporting ~a ~a~n" sub-mac count))
+                   (format "reporting ~a ~a" sub-mac count))
       (insert-into-collection COLLECTION
                               sub-mac
                               count
