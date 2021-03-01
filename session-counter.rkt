@@ -1,74 +1,105 @@
 #lang racket
-;; sudo ip link set wlan0 down
-;; sudo iw wlan0 set monitor control
-;; sudo ip link set wlan0 up
-;; sudo lshw -class network
 
-;; MAC addresses are 17 characters long.
-(define MAC-ADDRESS-LENGTH 17)
+(require sql db gregor)
+(require
+  "lib/constants.rkt"
+  "lib/tshark.rkt"
+  "lib/duration-db.rkt"
+  "lib/api.rkt")
 
-;;  tshark -a duration:16 -I -i wlan1 -Tfields -e wlan.sa 2>/dev/null | sort -u
-(define (count-packets #:adapter [adapter "wlan1"]
-                       #:seconds [seconds 15])
-  (define addresses (make-hash))
-  (define-values (pid inp outp errp)
-    (with-handlers ([exn? (λ (err)
-                            (fprintf (current-error-port)
-                                     "Something went wrong with packet counting.~n")
-                            (close-input-port inp)
-                            (close-output-port outp)
-                            (close-output-port errp))])
-      (subprocess false false false
-                  "/usr/bin/tshark"
-                  "-a" (format "duration:~a" seconds)
-                  "-I"
-                  "-i" adapter
-                  "-Tfields" "-e" "wlan.sa")))
-  (define read-thread-id
-    (thread (λ ()
-              (let loop ([line (read-line inp)])
-                (unless (eof-object? line)
-                  (when (= MAC-ADDRESS-LENGTH (string-length line))
-                    (hash-set! addresses line
-                               (add1 (hash-ref addresses line 0))))
-                  (loop (read-line inp))))
-              
-              ;; Before we quit, we need to close the subprocess ports.
-              (close-input-port inp)
-              (close-output-port outp)
-              (close-input-port errp)
-              )))
-  ;; Monitor the thread. Kill it after seconds + 1
-  (define watcher-id
-    (thread (λ ()
-              (sleep (add1 seconds))
-              (fprintf (current-error-port)
-                       "Packet counting timed out.~n")
-              ;; If we get here, that means the process ran away, or
-              ;; otherwise bad things happened.
-              (subprocess-kill pid true)
-              (close-input-port inp)
-              (close-output-port outp)
-              (close-input-port errp)
-              (when (thread? read-thread-id)
-                (kill-thread read-thread-id)))))
-  ;; Run the monitoring process.
-  (thread-wait read-thread-id)
-  ;; If it terminates normally, stop the watcher.
-  (kill-thread watcher-id)
-  ;; Return the found addresses. Returns an empty hash
-  ;; if things went wrong. (This adheres to contract.)
-  addresses)
-  
+(define logger-ch (make-channel))
+(define (proc:logger msg?)
+  (let loop ()
+    (define msg (channel-get msg?))
+    (printf "~a: ~a~n"
+            (datetime->iso8601 (now))
+            msg)
+    (loop)))
 
-(define mem-use '())
-(let loop ([count 0])
-  (unless (> count 100)
-    (define pkts (count-packets #:adapter "wlx9cefd5fc98b7" #:seconds 3))
-    (define cmu (current-memory-use))
-    (printf "~a: ~a ~a~n" count cmu (hash-count pkts))
-    (set mem-use (cons cmu mem-use))
+(define (proc:minute-tick ch!)
+  (define prev-minute (date-minute (seconds->date (current-seconds))))
+  (let loop ()
+    (sleep 3)
+    (define current-minute (date-minute (seconds->date (current-seconds))))
+    (when (not (equal? prev-minute current-minute))
+      (channel-put ch! 'tick)
+      (set! prev-minute current-minute))
+    (loop)
+    ))
+
+(define (proc:every-nth-tick n-ticks tick-ch? nth-tick! passthrough!)
+  (define counter 0)
+  (let loop ()
+    (define tick (channel-get tick-ch?))
+    (set! counter (modulo (add1 counter) n-ticks))
+    (when (zero? counter)
+      (channel-put logger-ch
+                   (format "every ~a ticks!"
+                           n-ticks))
+      (channel-put nth-tick! tick))
+    (channel-put passthrough! tick)
+    (loop)
+    ))
+
+(define (proc:tshark go? #:seconds seconds #:adapter adapter)
+  (let loop ()
+    (channel-get go?)
+    (channel-put logger-ch
+                 (format "running for ~a" seconds))
+    (define pkts (run-tshark #:seconds seconds #:adapter adapter))
+    (for ([(k v) pkts])
+        (log-mac k #:timestamp (now)))
+    (loop)))
+
+(define (proc:consolidate go? results!)
+  (let loop ()
+    (channel-get go?)
+    (channel-put logger-ch
+                 (format "consolidating."))
+    (define consolidated-results (consolidate))
+    ;; Flush the DB after consolidating.
+    (initialize-db)
+    (channel-put results! consolidated-results)
     (collect-garbage)
-    (loop (add1 count))))
+    (channel-put logger-ch
+                 (format "memory ~a~n"
+                         (current-memory-use)))
+    (loop)
+    ))
 
+(define (proc:report-results results?)
+  (let loop ()
+    (define consolidated (channel-get results?))
+    (channel-put logger-ch
+                 (format "reporting ~a addresses" (hash-count consolidated)))
+    (define token (get-token #:username USERNAME #:password PASSWORD))
+    ;; FIXME
+    ;; There's no reason to hammer the API endpoint.
+    ;; We should have a way to bulk insert?
+    (for ([(mac count) consolidated])
+      (define sub-mac (substring mac 0 8))
+      (channel-put logger-ch
+                   (format "reporting ~a ~a~n" sub-mac count))
+      (insert-into-collection COLLECTION
+                              sub-mac
+                              count
+                              #:token token)
+      (sleep 0.1))
+    (loop)))
+                              
 
+(define (main)
+  (initialize-db)
+  
+  (define tick-cap1 (make-channel))
+  (define tick-cap2 (make-channel))
+  (define tick-rept (make-channel))
+  (define results (make-channel))
+  
+  (thread (thunk (proc:logger logger-ch)))
+  (thread (thunk (proc:minute-tick tick-cap1)))
+  (thread (thunk (proc:every-nth-tick REPORT-MINUTES tick-cap1 tick-rept tick-cap2)))
+  (thread (thunk (proc:tshark tick-cap2 #:seconds OBSERVE-SECONDS #:adapter "wlan1")))
+  (thread (thunk (proc:consolidate tick-rept results)))
+  (thread (thunk (proc:report-results results)))
+  )
