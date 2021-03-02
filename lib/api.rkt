@@ -14,7 +14,12 @@
           #:json (hasheq 'email USERNAME
                          'password PASSWORD)))
   (define json (response-json resp))
-  (hash-ref (hash-ref json 'data) 'access_token))
+  (cond
+    [(and (hash? json) (hash-has-key? json 'data))
+     (hash-ref (hash-ref json 'data) 'access_token)]
+    [else
+     false]))
+     
 
 (define (insert-wifi-device collection mac count
                             #:mfg-short [mfg-short "unknown"]

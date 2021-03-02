@@ -66,7 +66,9 @@
     (define ram-use (current-memory-use))
     (channel-put logger-ch
                  (format "memory ~a~n" ram-use))
-    (report-ram ram-use #:token (get-token #:username USERNAME #:password PASSWORD))
+    (define token (get-token #:username USERNAME #:password PASSWORD))
+    (when token
+      (report-ram ram-use #:token token))
  
     (loop)
     ))
@@ -81,26 +83,27 @@
       ;; FIXME
       ;; There's no reason to hammer the API endpoint.
       ;; We should have a way to bulk insert?
-      (for ([(mac count) consolidated])
-        (define-values (rept-mac short-mfg long-mfg)
-          (cond
-            [(mfg-exists?  (substring mac 0 14) #:mfg oui-db)
-             (get-mfg (substring mac 0 14) #:mfg oui-db)]
-            [(mfg-exists? (substring mac 0 11) #:mfg oui-db)
-             (get-mfg (substring mac 0 11) #:mfg oui-db)]
-            [(mfg-exists? (substring mac 0 8) #:mfg oui-db)
-             (get-mfg (substring mac 0 8) #:mfg oui-db)]
-            [else
-             (values (substring mac 0 8) "uknown" "uknown")]))
-        (channel-put logger-ch
-                     (format "reporting ~a ~a ~a"  rept-mac short-mfg count))
-        (insert-wifi-device COLLECTION
-                            rept-mac
-                            count
-                            #:mfg-short short-mfg
-                            #:mfg-long long-mfg
-                            #:token token)
-        (sleep 0.1)))
+      (when token
+        (for ([(mac count) consolidated])
+          (define-values (rept-mac short-mfg long-mfg)
+            (cond
+              [(mfg-exists?  (substring mac 0 14) #:mfg oui-db)
+               (get-mfg (substring mac 0 14) #:mfg oui-db)]
+              [(mfg-exists? (substring mac 0 11) #:mfg oui-db)
+               (get-mfg (substring mac 0 11) #:mfg oui-db)]
+              [(mfg-exists? (substring mac 0 8) #:mfg oui-db)
+               (get-mfg (substring mac 0 8) #:mfg oui-db)]
+              [else
+               (values (substring mac 0 8) "unknown" "unknown")]))
+          (channel-put logger-ch
+                       (format "reporting ~a ~a ~a"  rept-mac short-mfg count))
+          (insert-wifi-device COLLECTION
+                              rept-mac
+                              count
+                              #:mfg-short short-mfg
+                              #:mfg-long long-mfg
+                              #:token token)
+          (sleep 0.1))))
     (loop)))
 
 (define (proc:delta in? out1! out2!)
