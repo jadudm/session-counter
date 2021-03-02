@@ -66,54 +66,66 @@
   consolidated
   )
 
+(define mfg-conn (make-parameter false))
 
-(define mfg-exists?
-  (let ([memo (make-hash)]
-        [conn (make-parameter false)])
-    (λ (mac #:mfg mfg)
-      (when (not (conn))
-        (conn (sqlite3-connect #:database mfg)))
-      (cond
-        [(hash-has-key? memo mac)
-         true]
-        [else
-         (define row
-           (with-handlers ([exn? (λ (e) false)])
-             (query-row conn (select #:from oui
-                                     #:where (= mac ,mac)))))
-         (cond
-           [row
-            (hash-set! memo mac true)
-            true]
-           [else
-            (hash-set! memo mac false)
-            false])
-         ]))))
-           
+(define (mfg-exists? mac #:mfg mfg)
+  (let ([memo (make-hash)])
+    (when (not (mfg-conn))
+      (mfg-conn (sqlite3-connect #:database mfg)))
+    (cond
+      [(hash-has-key? memo mac)
+       true]
+      [else
+       (define rows
+         (with-handlers ([exn? (λ (e) false)])
+           ;; FIXME The OUI DB is uppercase, but tshark reports lowercase.
+           (query-rows (mfg-conn)
+                       (select id
+                               #:from oui
+                               #:where (like mac ,(format "~a%"
+                                                          (string-upcase mac)))))))
+       (cond
+         [(not (empty? rows))
+          (hash-set! memo mac true)
+          true]
+         [else
+          (hash-set! memo mac false)
+          false])
+       ])))
 
 (define get-mfg
-  (let ([memo (make-hash)]
-        [conn (make-parameter false)])
-    (λ (mac #:length [length 'short] #:mfg mfg)
-      (when (not (conn))
-        (conn (sqlite3-connect #:database mfg)))
+  (let ([memo (make-hash)])
+    (λ (mac #:mfg mfg)
+      (when (not (mfg-conn))
+        (mfg-conn (sqlite3-connect #:database mfg)))
       (cond
         [(hash-has-key? memo mac)
-         (values (first (hash-ref memo mac))
+         (values mac
+                 (first (hash-ref memo mac))
                  (second (hash-ref memo mac))
-                 length)]
+                 )]
         [else
-         (define row
-           (with-handlers ([exn? (λ (e) false)])
-             (query-row conn (select #:from oui
-                                     #:where (= mac ,mac)))))
+         (define rows
+           (with-handlers ([exn? (λ (e)
+                                   ;;(fprintf (current-error-port) "e: ~a~n" e)
+                                   false)])
+             (query-rows (mfg-conn)
+                         (select id manufacturer
+                                 #:from oui
+                                 #:where (like mac ,(format "~a%"
+                                                            (string-upcase mac)))))
+             ))
          (cond
-           [row
-            (hash-set! memo mac (list (vector-ref row 1) (vector-ref row 2)))
-            (values (vector-ref row 1) (vector-ref row 2) length)]
+           [(not (empty? rows))
+            (hash-set! memo mac (list (vector-ref (first rows) 0)
+                                      (vector-ref (first rows) 1)))
+            (values mac
+                    (vector-ref (first rows) 0)
+                    (vector-ref (first rows) 1))]
            [else
-            (hash-set! memo mac (list "uknown" "unknown"))
-            (values "unknown" "unknown" length)])
+            (hash-set! memo mac (list "unknown" "unknown"))
+            (values mac
+                    "unknown"
+                    "unknown")])
          ]))))
            
-      

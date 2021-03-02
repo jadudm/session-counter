@@ -1,6 +1,6 @@
 #lang racket
 
-(provide get-token insert-into-collection report-ram)
+(provide get-token insert-wifi-device report-ram)
 
 (require "constants.rkt")
 (require  net/http-easy json gregor)
@@ -16,10 +16,10 @@
   (define json (response-json resp))
   (hash-ref (hash-ref json 'data) 'access_token))
 
-(define (insert-into-collection collection mac count
-                                #:mfg-short [mfg-short "unknown"]
-                                #:mfg-long [mfg-long "unknown"]
-                                #:token token)
+(define (insert-wifi-device collection mac count
+                            #:mfg-short [mfg-short "unknown"]
+                            #:mfg-long [mfg-long "unknown"]
+                            #:token token)
   (define resp
     (post (make-uri (format "/items/~a" collection))
           #:headers (hasheq 'Authorization

@@ -50,7 +50,7 @@
     (channel-put logger-ch
                  (format "found ~a MAC addresses" (hash-count pkts)))
     (for ([(k v) pkts])
-        (log-mac k #:timestamp (now)))
+      (log-mac k #:timestamp (now)))
     (loop)))
 
 (define (proc:consolidate go? results!)
@@ -74,35 +74,33 @@
 (define (proc:report-results results? #:oui-db [oui-db false])
   (let loop ()
     (define consolidated (channel-get results?))
-    (channel-put logger-ch
-                 (format "reporting ~a addresses" (hash-count consolidated)))
-    (define token (get-token #:username USERNAME #:password PASSWORD))
-    ;; FIXME
-    ;; There's no reason to hammer the API endpoint.
-    ;; We should have a way to bulk insert?
-    (for ([(mac count) consolidated])
-      (define long-mac (substring mac 0 11))
-      (define short-mac (substring mac 0 8))
-
-      (define-values (short-mfg long-mfg mac-length)
-        (cond
-          [(mfg-exists? long-mac #:mfg oui-db)
-           (get-mfg long-mac #:length 'long #:mfg oui-db)]
-          [(mfg-exists? short-mac #:mfg oui-db)
-           (get-mfg short-mac #:length 'short #:mfg oui-db)]
-          [else
-           (values "uknown" "uknown" 'unknown)]))
-
-      (define the-mac (if (equal? mac-length 'long) long-mac short-mac))
+    (when (> (hash-count consolidated) 0)
       (channel-put logger-ch
-                   (format "reporting ~a ~a ~a" short-mfg the-mac count))
-      (insert-into-collection COLLECTION
-                              the-mac
-                              short-mfg
-                              long-mfg
-                              count
-                              #:token token)
-      (sleep 0.1))
+                   (format "reporting ~a addresses" (hash-count consolidated)))
+      (define token (get-token #:username USERNAME #:password PASSWORD))
+      ;; FIXME
+      ;; There's no reason to hammer the API endpoint.
+      ;; We should have a way to bulk insert?
+      (for ([(mac count) consolidated])
+        (define-values (rept-mac short-mfg long-mfg)
+          (cond
+            [(mfg-exists?  (substring mac 0 14) #:mfg oui-db)
+             (get-mfg (substring mac 0 14) #:mfg oui-db)]
+            [(mfg-exists? (substring mac 0 11) #:mfg oui-db)
+             (get-mfg (substring mac 0 11) #:mfg oui-db)]
+            [(mfg-exists? (substring mac 0 8) #:mfg oui-db)
+             (get-mfg (substring mac 0 8) #:mfg oui-db)]
+            [else
+             (values (substring mac 0 8) "uknown" "uknown")]))
+        (channel-put logger-ch
+                     (format "reporting ~a ~a ~a"  rept-mac short-mfg count))
+        (insert-wifi-device COLLECTION
+                            rept-mac
+                            count
+                            #:mfg-short short-mfg
+                            #:mfg-long long-mfg
+                            #:token token)
+        (sleep 0.1)))
     (loop)))
 
 (define (proc:delta in? out1! out2!)
