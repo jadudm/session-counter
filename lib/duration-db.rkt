@@ -6,6 +6,8 @@
 (provide the-db
          initialize-db
          log-mac
+         mfg-exists?
+         get-mfg
          consolidate)
 
 (struct report (vendor-bytes vendor-oui count))
@@ -63,3 +65,55 @@
 
   consolidated
   )
+
+
+(define mfg-exists?
+  (let ([memo (make-hash)]
+        [conn (make-parameter false)])
+    (λ (mac #:mfg mfg)
+      (when (not (conn))
+        (conn (sqlite3-connect #:database mfg)))
+      (cond
+        [(hash-has-key? memo mac)
+         true]
+        [else
+         (define row
+           (with-handlers ([exn? (λ (e) false)])
+             (query-row conn (select #:from oui
+                                     #:where (= mac ,mac)))))
+         (cond
+           [row
+            (hash-set! memo mac true)
+            true]
+           [else
+            (hash-set! memo mac false)
+            false])
+         ]))))
+           
+
+(define get-mfg
+  (let ([memo (make-hash)]
+        [conn (make-parameter false)])
+    (λ (mac #:length [length 'short] #:mfg mfg)
+      (when (not (conn))
+        (conn (sqlite3-connect #:database mfg)))
+      (cond
+        [(hash-has-key? memo mac)
+         (values (first (hash-ref memo mac))
+                 (second (hash-ref memo mac))
+                 length)]
+        [else
+         (define row
+           (with-handlers ([exn? (λ (e) false)])
+             (query-row conn (select #:from oui
+                                     #:where (= mac ,mac)))))
+         (cond
+           [row
+            (hash-set! memo mac (list (vector-ref row 1) (vector-ref row 2)))
+            (values (vector-ref row 1) (vector-ref row 2) length)]
+           [else
+            (hash-set! memo mac (list "uknown" "unknown"))
+            (values "unknown" "unknown" length)])
+         ]))))
+           
+      
