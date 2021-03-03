@@ -5,17 +5,8 @@
   "lib/constants.rkt"
   "lib/tshark.rkt"
   "lib/duration-db.rkt"
-  "lib/api.rkt")
-
-(define logger-ch (make-channel))
-
-(define (proc:logger msg?)
-  (let loop ()
-    (define msg (channel-get msg?))
-    (printf "~a: ~a~n"
-            (datetime->iso8601 (now))
-            msg)
-    (loop)))
+  "lib/api.rkt"
+  "lib/logging.rkt")
 
 (define (proc:minute-tick ch!)
   (define prev-minute (date-minute (seconds->date (current-seconds))))
@@ -34,9 +25,7 @@
     (define tick (channel-get tick-ch?))
     (set! counter (modulo (add1 counter) n-ticks))
     (when (zero? counter)
-      (channel-put logger-ch
-                   (format "every ~a ticks!"
-                           n-ticks))
+      (log-wifi-info "every ~a ticks!" n-ticks)
       (channel-put nth-tick! tick))
     (loop)
     ))
@@ -44,11 +33,9 @@
 (define (proc:tshark go? #:seconds seconds #:adapter adapter)
   (let loop ()
     (channel-get go?)
-    (channel-put logger-ch
-                 (format "running for ~a" seconds))
+    (log-wifi-info "running tshark for ~a" seconds)
     (define pkts (run-tshark #:seconds seconds #:adapter adapter))
-    (channel-put logger-ch
-                 (format "found ~a MAC addresses" (hash-count pkts)))
+    (log-wifi-info "found ~a MAC addresses" (hash-count pkts))
     (for ([(k v) pkts])
       (log-mac k #:timestamp (now)))
     (loop)))
@@ -56,16 +43,14 @@
 (define (proc:consolidate go? results!)
   (let loop ()
     (channel-get go?)
-    (channel-put logger-ch
-                 (format "consolidating."))
+    (log-wifi-info  "consolidating")
     (define consolidated-results (consolidate))
     ;; Flush the DB after consolidating.
     (initialize-db)
     (channel-put results! consolidated-results)
     (collect-garbage)
     (define ram-use (current-memory-use))
-    (channel-put logger-ch
-                 (format "memory ~a~n" ram-use))
+    (log-wifi-info "current-memory-use ~a~n" ram-use)
     (define token (get-token #:username USERNAME #:password PASSWORD))
     (when token
       (report-ram ram-use #:token token))
@@ -77,8 +62,7 @@
   (let loop ()
     (define consolidated (channel-get results?))
     (when (> (hash-count consolidated) 0)
-      (channel-put logger-ch
-                   (format "reporting ~a addresses" (hash-count consolidated)))
+      (log-wifi-info "reporting ~a addresses" (hash-count consolidated))
       (define token (get-token #:username USERNAME #:password PASSWORD))
       ;; FIXME
       ;; There's no reason to hammer the API endpoint.
@@ -95,8 +79,7 @@
                (get-mfg (substring mac 0 8) #:mfg oui-db)]
               [else
                (values (substring mac 0 8) "unknown" "unknown")]))
-          (channel-put logger-ch
-                       (format "reporting ~a ~a ~a"  rept-mac short-mfg count))
+          (log-wifi-info "reporting ~a ~a ~a"  rept-mac short-mfg count)
           (insert-wifi-device COLLECTION
                               rept-mac
                               count
@@ -128,7 +111,8 @@
   (define tick-rept (make-channel))
   (define results (make-channel))
   
-  (define logger-id (thread (thunk (proc:logger logger-ch))))
+  ;;(define logger-id (thread (thunk (proc:simple-logger logger-ch))))
+  (define logger-id (proc:logger))
   
   (thread (thunk (proc:minute-tick tick)))
   (thread (thunk (proc:delta tick t1 t2)))
