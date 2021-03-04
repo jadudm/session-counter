@@ -50,7 +50,7 @@
     (channel-put results! consolidated-results)
     (collect-garbage)
     (define ram-use (current-memory-use))
-    (log-wifi-info "current-memory-use ~a~n" ram-use)
+    (log-wifi-info "current-memory-use ~a" ram-use)
     (define token (get-token #:username USERNAME #:password PASSWORD))
     (when token
       (report-ram ram-use #:token token))
@@ -92,17 +92,15 @@
 (define (proc:delta in? out1! out2!)
   (let loop ()
     (define v (channel-get in?))
-    ;; This is a PAR delta, essentially.
-    ;; Don't exit the PAR until both branches complete.
-    ;; This is technically redundant, because the comms are
-    ;; guaranteed to complete before unblocking.
-    (thread (thunk (channel-put out1! v)))
-    (thread (thunk (channel-put out2! v)))
+    ;; This is a SEQ delta
+    (channel-put out1! v)
+    (channel-put out2! v)
     (loop)
     ))
 
 (provide main)
 (define (main #:oui-db [oui-db false])
+  
   (initialize-db)
   
   (define tick (make-channel))
@@ -112,7 +110,7 @@
   (define results (make-channel))
   
   ;;(define logger-id (thread (thunk (proc:simple-logger logger-ch))))
-  (define logger-id (proc:logger))
+  (define logger-id (thread (thunk (proc:logger))))
   
   (thread (thunk (proc:minute-tick tick)))
   (thread (thunk (proc:delta tick t1 t2)))
@@ -123,5 +121,6 @@
   (thread (thunk (proc:report-results results #:oui-db oui-db)))
 
   ;; Waits forever. Otherwise, Racket exits.
+  (log-wifi-info "starting up")
   (thread-wait logger-id)
   )

@@ -12,11 +12,11 @@
 ;; Every 10 minutes we will report our findings.
 ;; We'll do this by asking if the number of minutes in a datetime stamp
 ;; is (zero? (modulo minutes 10)))
-(define REPORT-MINUTES 5)
+(define REPORT-MINUTES 10)
 
 ;; How many times do we need to see a device in this
 ;; time period in order to log it to the server?
-(define APPEARANCE-THRESHOLD 3)
+(define APPEARANCE-THRESHOLD 2)
 
 
 (define SCHEME "https")
@@ -30,7 +30,7 @@
 (when (or (not USERNAME)
           (not PASSWORD))
   (fprintf (current-error-port)
-           "SESSIONCOUNTUSERNAME|PASSWORD must be in the env. Exiting.~n")
-  (exit))
+            "export SESSIONCOUNTUSERNAME=\"\"~nexport SESSIONCOUNTPASSWORD=\"\"~nmust be in the env. Exiting.~n")
+  )
 
 (define HTTP-RETRY-THRESHOLD 10)
