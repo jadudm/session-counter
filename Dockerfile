@@ -1,8 +1,10 @@
-FROM ubuntu:focal as BUILDSTAGE
+ARG ARCH=
+FROM ${ARCH}debian:buster-slim as BUILDSTAGE
+# FROM ubuntu:focal as BUILDSTAGE
 LABEL maintainer="matthew.jadud@gsa.gov"
 
-RUN apt-get update && apt-get install -y apt-transport-https
-RUN apt-get install -y build-essential
+RUN apt-get update && \
+    apt-get install -y build-essential
 
 # By using a version variable, it makes it harder
 # to "accidentally" bump the version.
@@ -19,7 +21,8 @@ RUN ./configure && \
     make && \
     make install 
 
-FROM ubuntu:focal as SETUP
+FROM ${ARCH}debian:buster-slim as SETUP
+# FROM ubuntu:focal as SETUP
 COPY --from=BUILDSTAGE /racket /racket
 ENV PATH="/racket/bin:$PATH"
 
@@ -43,9 +46,11 @@ COPY . /app
 RUN raco exe -o session-counter session-counter.rkt && \
     raco distribute /session-counter session-counter
 
-FROM ubuntu:focal
-RUN apt-get install -y tshark && \
-    chmod +x /usr/bin/dumpcap
+FROM ${ARCH}debian:buster-slim
+# FROM ubuntu:focal
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y tshark && \
+    echo "y" | dpkg-reconfigure wireshark-common
+RUN chmod +x /usr/bin/dumpcap
 COPY --from=SETUP /session-counter /opt/session-counter
 ENV PATH="/opt/session-counter/bin:$PATH"
 ENTRYPOINT ["/opt/session-counter"]
