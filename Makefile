@@ -4,7 +4,7 @@ default: sc ;
 sc:
 	docker buildx build \
 		-f Dockerfile.session-counter \
-		-t jadudm/arm64-session-counter \
+		-t jadudm/arm64-session-counter:alpha \
 		--platform linux/arm64/v8 \
 		--output "type=docker,push=false,name=jadudm/session-counter-arm64v8,dest=session-counter-arm64.tar" \
 		.
@@ -13,7 +13,7 @@ racket:
 	rm -f racket8-arm64.tar
 	docker buildx build \
 		-f Dockerfile.racket \
-		-t jadudm/racket8-arm64v8 \
+		-t jadudm/racket8-arm64v8:alpha \
 		--platform linux/arm64/v8 \
 		--output "type=docker,push=false,name=jadudm/racket8-arm64v8,dest=racket8-arm64.tar" \
 		.
@@ -24,7 +24,7 @@ racket:
 racketpi:
 	docker build \
 		-f Dockerfile.racket \
-		-t jadudm/racket8-arm64v8 \
+		-t jadudm/racket8-arm64v8:alpha \
 		--output "type=docker,push=false,name=jadudm/racket8-arm64v8,dest=racket8-arm64.tar" \
 		.
 
