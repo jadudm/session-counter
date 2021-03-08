@@ -1,0 +1,50 @@
+# Build this image:
+# docker buildx build -f Dockerfile.session-counter -t jadudm/arm64-session-counter --no-cache --platform linux/arm64/v8 .
+FROM arm64v8/ubuntu:focal as build
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        ca-certificates \
+        git \
+        libssl1.1 \
+        openssl \
+        tshark
+
+RUN chmod +x /usr/bin/dumpcap
+    # Not needed; running as root in a container.
+    # yes | dpkg-reconfigure wireshark-common
+    # usermod -a -G wireshark ubuntu
+
+# Use the previously built image.
+# docker buildx build -f Dockerfile.racket -t jadudm/arm64-racket8 --no-cache --platform linux/arm64/v8 .
+COPY --from=jadudm/arm64-racket8 /opt/racket /opt/racket
+ENV PATH="/opt/racket/bin:$PATH"
+
+RUN raco pkg config --scope installation --set catalogs \
+    https://download.racket-lang.org/releases/8.0/catalog/ \
+    https://racksnaps.defn.io/snapshots/2021/03/06/catalog/
+
+RUN raco pkg install --no-docs --skip-installed --auto \
+    gregor \
+    http-easy \
+    sql
+
+WORKDIR /app
+# FIXME: this should be a git clone of a tag.
+# That would be safer.
+COPY . /app 
+
+# Compile the application and package it for distribution.
+# This guarantees nothing changes underneath us.
+RUN raco exe -o session-counter session-counter.rkt && \
+    raco distribute /session-counter session-counter
+
+# FROM ${ARCH}debian:buster-slim
+FROM arm64v8/ubuntu:focal
+# RUN DEBIAN_FRONTEND=noninteractive apt-get install -y tshark && \
+#     echo "y" | dpkg-reconfigure wireshark-common
+# RUN chmod +x /usr/bin/dumpcap
+COPY --from=build /session-counter /opt/session-counter
+ENV PATH="/opt/session-counter/bin:$PATH"
+ENTRYPOINT ["/opt/session-counter"]
+
