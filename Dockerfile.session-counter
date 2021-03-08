@@ -1,7 +1,7 @@
 # Build this image:
 # docker buildx build -f Dockerfile.session-counter -t jadudm/arm64-session-counter --no-cache --platform linux/arm64/v8 .
-# FROM arm64v8/ubuntu:focal
-FROM jadudm/racket8-arm64v8:latest
+FROM arm64v8/ubuntu:focal
+# FROM jadudm/racket8-arm64v8:alpha
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -13,7 +13,7 @@ RUN apt-get update && \
     
 # Use the previously built image.
 # docker buildx build -f Dockerfile.racket -t jadudm/arm64-racket8 --no-cache --platform linux/arm64/v8 .
-COPY --from=jadudm/racket8-arm64v8 /opt/racket /opt/racket
+COPY --from=jadudm/racket8-arm64v8:alpha /opt/racket /opt/racket
 ENV PATH="/opt/racket/bin:$PATH"
 
 RUN raco pkg config --scope installation --set catalogs \
