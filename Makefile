@@ -17,9 +17,9 @@ racket:
 		--platform linux/arm64/v8 \
 		--output "type=docker,push=false,name=jadudm/racket8-arm64v8,dest=racket8-arm64.tar" \
 		.
-	docker rm jadudm/arm64-racket8
-	docker rmi $(docker images 'jadudm/arm64-racket8' -a -q)
-	docker load < racket8-arm64.tar
+	# docker rm jadudm/arm64-racket8
+	# docker rmi $(docker images 'jadudm/arm64-racket8' -a -q)
+	# docker load < racket8-arm64.tar
 
 all: clean racket sc
 
