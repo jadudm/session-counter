@@ -21,6 +21,13 @@ racket:
 	# docker rmi $(docker images 'jadudm/arm64-racket8' -a -q)
 	# docker load --input racket8-arm64.tar
 
+racketpi:
+	docker build \
+		-f Dockerfile.racket \
+		-t jadudm/racket8-arm64v8 \
+		--output "type=docker,push=false,name=jadudm/racket8-arm64v8,dest=racket8-arm64.tar" \
+		.
+
 all: clean racket sc
 
 clean:
