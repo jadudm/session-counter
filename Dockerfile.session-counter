@@ -1,6 +1,7 @@
 # Build this image:
 # docker buildx build -f Dockerfile.session-counter -t jadudm/arm64-session-counter --no-cache --platform linux/arm64/v8 .
-FROM arm64v8/ubuntu:focal as build
+# FROM arm64v8/ubuntu:focal
+FROM jadudm/racket8-arm64v8:latest
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -9,15 +10,10 @@ RUN apt-get update && \
         libssl1.1 \
         openssl \
         tshark
-
-RUN chmod +x /usr/bin/dumpcap
-    # Not needed; running as root in a container.
-    # yes | dpkg-reconfigure wireshark-common
-    # usermod -a -G wireshark ubuntu
-
+    
 # Use the previously built image.
 # docker buildx build -f Dockerfile.racket -t jadudm/arm64-racket8 --no-cache --platform linux/arm64/v8 .
-COPY --from=jadudm/arm64-racket8 /opt/racket /opt/racket
+COPY --from=jadudm/racket8-arm64v8 /opt/racket /opt/racket
 ENV PATH="/opt/racket/bin:$PATH"
 
 RUN raco pkg config --scope installation --set catalogs \
@@ -37,14 +33,8 @@ COPY . /app
 # Compile the application and package it for distribution.
 # This guarantees nothing changes underneath us.
 RUN raco exe -o session-counter session-counter.rkt && \
-    raco distribute /session-counter session-counter
+    raco distribute /opt/session-counter session-counter
 
-# FROM ${ARCH}debian:buster-slim
-FROM arm64v8/ubuntu:focal
-# RUN DEBIAN_FRONTEND=noninteractive apt-get install -y tshark && \
-#     echo "y" | dpkg-reconfigure wireshark-common
-# RUN chmod +x /usr/bin/dumpcap
-COPY --from=build /session-counter /opt/session-counter
 ENV PATH="/opt/session-counter/bin:$PATH"
-ENTRYPOINT ["/opt/session-counter"]
+ENTRYPOINT ["session-counter", "-o", "/app/manufacturers.sqlite"]
 
