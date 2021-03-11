@@ -1,37 +1,16 @@
 .PHONY: default
-default: sc ;
+default: exe ;
 
-sc:
-	docker buildx build \
-		-f Dockerfile.session-counter \
-		-t jadudm/arm64-session-counter:alpha \
-		--platform linux/arm64/v8 \
-		--output "type=docker,push=false,name=jadudm/session-counter-arm64v8,dest=session-counter-arm64.tar" \
-		.
+exe:
+	rm -f session-counter
+	raco exe -o session-counter session-counter.rkt
 
-racket:
-	rm -f racket8-arm64.tar
-	docker buildx build \
-		-f Dockerfile.racket \
-		-t jadudm/racket8-arm64v8:alpha \
-		--platform linux/arm64/v8 \
-		--output "type=docker,push=false,name=jadudm/racket8-arm64v8,dest=racket8-arm64.tar" \
-		.
-	# docker rm jadudm/arm64-racket8
-	# docker rmi $(docker images 'jadudm/arm64-racket8' -a -q)
-	# docker load --input racket8-arm64.tar
+dist: exe
+	raco distribute dist/ session-counter
 
-racketpi:
-	docker build \
-		-f Dockerfile.racket \
-		-t jadudm/racket8-arm64v8:alpha \
-		--output "type=docker,push=false,name=jadudm/racket8-arm64v8,dest=racket8-arm64.tar" \
-		.
-
-all: clean racket sc
+all: clean dist
 
 clean:
-	docker rm jadudm/arm64-racket8
-	docker rm jadudm/arm64-session-counter
-	docker rmi $(docker images 'jadudm/arm64-racket8' -a -q)
-	docker rmi $(docker images 'jadudm/arm64-session-counter' -a -q)
+	rm -rf dist/
+	rm -rf compiled/
+	rm -f session-counter

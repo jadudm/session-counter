@@ -2,3 +2,5 @@
 compiled/*
 lib/compiled/*
 *.tar
+dist/
+session-counter
