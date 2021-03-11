@@ -4,3 +4,4 @@ lib/compiled/*
 *.tar
 dist/
 session-counter
+session-counter.tgz

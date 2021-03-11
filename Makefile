@@ -7,6 +7,7 @@ exe:
 
 dist: exe
 	raco distribute dist/ session-counter
+	tar cvzf session-counter.tgz dist/
 
 all: clean dist
 
